@@ -1,0 +1,395 @@
+-- Compact Music GUI (mobile-friendly) - CORRIGIDO
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local player = Players.LocalPlayer
+
+-- GUI principal
+local gui = Instance.new("ScreenGui")
+gui.Name = "MusicGui"
+gui.Parent = player:WaitForChild("PlayerGui")
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+
+-- Botão toggle pequeno (canto direito)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleButton"
+toggleBtn.Size = UDim2.new(0, 36, 0, 36)
+toggleBtn.Position = UDim2.new(1, -12, 0.5, 0)
+toggleBtn.AnchorPoint = Vector2.new(1, 0.5)
+toggleBtn.Text = "😊"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Parent = gui
+toggleBtn.Active = true
+toggleBtn.Draggable = true
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+
+-- HUD compacta
+local hud = Instance.new("Frame")
+hud.Name = "MusicHUD"
+hud.Size = UDim2.new(0, 320, 0, 260)
+hud.Position = UDim2.new(0.5, 0, 0.5, 0)
+hud.AnchorPoint = Vector2.new(0.5, 0.5)
+hud.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+hud.BorderSizePixel = 0
+hud.Visible = false
+hud.Active = true
+hud.Draggable = true
+hud.Parent = gui
+Instance.new("UICorner", hud).CornerRadius = UDim.new(0, 12)
+
+-- Título
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -12, 0, 32)
+title.Position = UDim2.new(0, 6, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "Selecione Música"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = hud
+
+-- Container de músicas (scroll)
+local container = Instance.new("ScrollingFrame")
+container.Name = "MusicList"
+container.Size = UDim2.new(1, -12, 0, 140)
+container.Position = UDim2.new(0, 6, 0, 44)
+container.BackgroundTransparency = 1
+container.BorderSizePixel = 0
+container.ScrollBarThickness = 6
+container.Parent = hud
+
+local layout = Instance.new("UIGridLayout")
+layout.CellSize = UDim2.new(0, 140, 0, 34)
+layout.CellPadding = UDim2.new(0, 8, 0, 8)
+layout.FillDirection = Enum.FillDirection.Horizontal
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = container
+
+local function updateCanvas()
+    local sizeY = layout.AbsoluteContentSize.Y
+    container.CanvasSize = UDim2.new(0, 0, 0, sizeY + 8)
+end
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+
+-- Painel de controles
+local controls = Instance.new("Frame")
+controls.Size = UDim2.new(1, -12, 0, 60)
+controls.Position = UDim2.new(0, 6, 1, -70)
+controls.BackgroundTransparency = 1
+controls.Parent = hud
+
+local controlsLayout = Instance.new("UIListLayout", controls)
+controlsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+controlsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+controlsLayout.Padding = UDim.new(0, 8)
+
+local function createControlButton(text, sizeX)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, sizeX or 140, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = text
+    btn.TextScaled = true
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Parent = controls
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    return btn
+end
+
+local playSeqBtn = createControlButton("Tocar Sequência", 150)
+local chooseSeqBtn = createControlButton("Escolher Sequência", 150)
+
+-- Blur e modal
+local blurEffect = Instance.new("BlurEffect")
+blurEffect.Size = 10
+blurEffect.Enabled = false
+blurEffect.Parent = Lighting
+
+local blurOverlay = Instance.new("Frame")
+blurOverlay.Size = UDim2.new(1,0,1,0)
+blurOverlay.Position = UDim2.new(0,0,0,0)
+blurOverlay.BackgroundColor3 = Color3.fromRGB(0,0,0)
+blurOverlay.BackgroundTransparency = 0.5
+blurOverlay.Visible = false
+blurOverlay.ZIndex = 5
+blurOverlay.Parent = gui
+
+local repeatFrame = Instance.new("Frame")
+repeatFrame.Size = UDim2.new(0,260,0,160)
+repeatFrame.Position = UDim2.new(0.5,-130,0.5,-80)
+repeatFrame.AnchorPoint = Vector2.new(0.5,0.5)
+repeatFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+repeatFrame.BorderSizePixel = 1
+repeatFrame.BorderColor3 = Color3.fromRGB(200,200,200)
+repeatFrame.Visible = false
+repeatFrame.ZIndex = 6
+repeatFrame.Parent = gui
+Instance.new("UICorner", repeatFrame).CornerRadius = UDim.new(0,10)
+
+-- Conteúdo do repeatFrame
+local repeatTitle = Instance.new("TextLabel")
+repeatTitle.Size = UDim2.new(1,-20,0,36)
+repeatTitle.Position = UDim2.new(0,10,0,8)
+repeatTitle.BackgroundTransparency = 1
+repeatTitle.Text = "Quantas vezes tocar a sequência?"
+repeatTitle.TextColor3 = Color3.fromRGB(255,255,255)
+repeatTitle.Font = Enum.Font.GothamBold
+repeatTitle.TextScaled = true
+repeatTitle.TextWrapped = true
+repeatTitle.ZIndex = 7
+repeatTitle.Parent = repeatFrame
+
+local repeatInput = Instance.new("TextBox")
+repeatInput.Size = UDim2.new(0,100,0,30)
+repeatInput.Position = UDim2.new(0.5,-50,0,52)
+repeatInput.BackgroundColor3 = Color3.fromRGB(70,70,70)
+repeatInput.TextColor3 = Color3.fromRGB(255,255,255)
+repeatInput.Font = Enum.Font.Gotham
+repeatInput.Text = "1"
+repeatInput.TextScaled = true
+repeatInput.BorderSizePixel = 1
+repeatInput.BorderColor3 = Color3.fromRGB(200,200,200)
+repeatInput.ZIndex = 7
+repeatInput.Parent = repeatFrame
+Instance.new("UICorner", repeatInput).CornerRadius = UDim.new(0,8)
+
+local loopBtn = Instance.new("TextButton")
+loopBtn.Size = UDim2.new(0,100,0,30)
+loopBtn.Position = UDim2.new(0.5,-50,0,92)
+loopBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+loopBtn.TextColor3 = Color3.fromRGB(255,255,255)
+loopBtn.Font = Enum.Font.GothamBold
+loopBtn.Text = "Loop"
+loopBtn.TextScaled = true
+loopBtn.BorderSizePixel = 1
+loopBtn.BorderColor3 = Color3.fromRGB(200,200,200)
+loopBtn.ZIndex = 7
+loopBtn.Parent = repeatFrame
+Instance.new("UICorner", loopBtn).CornerRadius = UDim.new(0,8)
+
+local confirmBtn = Instance.new("TextButton")
+confirmBtn.Size = UDim2.new(0,100,0,30)
+confirmBtn.Position = UDim2.new(0.5,-50,0,124)
+confirmBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+confirmBtn.TextColor3 = Color3.fromRGB(255,255,255)
+confirmBtn.Font = Enum.Font.GothamBold
+confirmBtn.Text = "Confirmar"
+confirmBtn.TextScaled = true
+confirmBtn.BorderSizePixel = 1
+confirmBtn.BorderColor3 = Color3.fromRGB(200,200,200)
+confirmBtn.ZIndex = 7
+confirmBtn.Parent = repeatFrame
+Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0,8)
+
+-- Lista de músicas
+local musicas = {
+    {nome="MTG Zum Zum Zum", id=92446612272052, duracao=125},
+    {nome="No era amor", id=77473936900775, duracao=112},
+    {nome="'67'", id=122854357582130, duracao=84},
+    {nome="Montagem tomada", id=114727662968481, duracao=70},
+    {nome="Funk putinha safada", id=104621031886653, duracao=89},
+    {nome="Música relaxante", id=1848354536, duracao=97},
+    {nome="Trem fantasma funk", id=97765714111493, duracao=71},
+    {nome="Meu coração é regador de flor", id=102705292327383, duracao=109},
+    {nome="Vai tomar so rajadão phonk", id=98337901681441, duracao=84},
+    {nome="Funk estorado não use", id=137963518593865, duracao=144},
+    {nome="Você se entregar pra mim desce só mais um pouquin", id=131847084942844, duracao=80},
+    {nome="Solo una noche", id=114620665238286, duracao=94},
+    {nome="Eu so quero te esquecer phonk brabo", id=139388235328030, duracao=89},
+    {nome="Na festa do fim de semana phonk", id=114138177515042, duracao=147}
+}
+
+-- Clipboard helper
+local function copyToClipboard(text)
+    if setclipboard then
+        setclipboard(text)
+    elseif syn and syn.set_clipboard then
+        syn.set_clipboard(text)
+    else
+        print("Copiar: "..text)
+    end
+end
+
+-- Equip/unequip Boombox
+local function equipBoombox()
+    local character = player.Character
+    if not character then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    local tool = character:FindFirstChildWhichIsA("Tool")
+    if tool and tool:FindFirstChildWhichIsA("RemoteEvent") then return true end
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _,v in pairs(backpack:GetChildren()) do
+            if v:IsA("Tool") and v:FindFirstChildWhichIsA("RemoteEvent") then
+                humanoid:EquipTool(v)
+                task.wait(0.1)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function unequipBoombox()
+    local character = player.Character
+    if not character then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    humanoid:UnequipTools()
+    return true
+end
+
+-- Estado
+local isPlaying = false
+local isChoosingSequence = false
+local customSequence = {}
+local currentSequence = musicas
+local playbackConnection = nil
+local repeatCount = 1
+local isLooping = false
+
+-- Cria botões das músicas
+for _, item in ipairs(musicas) do
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0,140,0,34)
+    button.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    button.TextColor3 = Color3.fromRGB(255,255,255)
+    button.Font = Enum.Font.Gotham
+    button.Text = item.nome
+    button.TextScaled = true
+    button.BorderSizePixel = 1
+    button.BorderColor3 = Color3.fromRGB(200,200,200)
+    button.Parent = container
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0,8)
+    button.MouseButton1Click:Connect(function()
+        if isChoosingSequence then
+            table.insert(customSequence,item)
+            button.BackgroundColor3 = Color3.fromRGB(100,100,100)
+        else
+            copyToClipboard(tostring(item.id))
+        end
+    end)
+end
+
+-- Funções de playback
+local function stopPlayback()
+    if isPlaying then
+        isPlaying = false
+        if playbackConnection then
+            pcall(function() task.cancel(playbackConnection) end)
+            playbackConnection = nil
+        end
+        unequipBoombox()
+        playSeqBtn.Text = "Tocar Sequência"
+    end
+end
+
+local function playSequence()
+    if isPlaying then stopPlayback() return end
+    if not equipBoombox() then warn("Não foi possível equipar a BoomBox!") return end
+    local character = player.Character or player.CharacterAdded:Wait()
+    local tool
+    local attempts = 0
+    repeat
+        tool = nil
+        for _,v in pairs(character:GetChildren()) do
+            if v:IsA("Tool") and v:FindFirstChildWhichIsA("RemoteEvent") then
+                tool = v break
+            end
+        end
+        task.wait(0.5)
+        attempts = attempts + 1
+    until tool or attempts>=10
+    if not tool then warn("BoomBox não encontrada!") return end
+    local remote = tool:FindFirstChildWhichIsA("RemoteEvent")
+    if not remote then warn("RemoteEvent da BoomBox não encontrado!") return end
+    isPlaying = true
+    playSeqBtn.Text = "Parar Sequência"
+    playbackConnection = task.spawn(function()
+        local currentRepeat = 0
+        while (isLooping or currentRepeat < repeatCount) and isPlaying do
+            for _, item in ipairs(currentSequence) do
+                if not isPlaying then break end
+                pcall(function() remote:FireServer("PlaySong",item.id) end)
+                task.wait(item.duracao)
+            end
+            if not isLooping then currentRepeat = currentRepeat + 1 end
+        end
+        stopPlayback()
+        customSequence = {}
+        currentSequence = musicas
+    end)
+end
+
+-- Modal
+local function openRepeatFrame()
+    repeatFrame.Visible = true
+    blurOverlay.Visible = true
+    blurEffect.Enabled = true
+    repeatFrame.Position = UDim2.new(0.5,-130,0.5,-100)
+    TweenService:Create(repeatFrame, TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out), {Position=UDim2.new(0.5,-130,0.5,-80)}):Play()
+end
+
+-- Escolher sequência
+local function toggleChooseSequence()
+    if isChoosingSequence then
+        isChoosingSequence = false
+        chooseSeqBtn.Text = "Escolher Sequência"
+        if #customSequence>0 then currentSequence = customSequence end
+        customSequence = {}
+        for _, btn in pairs(container:GetChildren()) do
+            if btn:IsA("TextButton") then btn.BackgroundColor3 = Color3.fromRGB(60,60,60) end
+        end
+        stopPlayback()
+        openRepeatFrame()
+    else
+        isChoosingSequence = true
+        chooseSeqBtn.Text = "Confirmar Sequência"
+        customSequence = {}
+    end
+end
+
+-- Conexões UI
+toggleBtn.MouseButton1Click:Connect(function()
+    hud.Visible = not hud.Visible
+    if hud.Visible then updateCanvas() end
+end)
+
+playSeqBtn.MouseButton1Click:Connect(function()
+    if isPlaying then playSequence() else openRepeatFrame() end
+end)
+
+chooseSeqBtn.MouseButton1Click:Connect(toggleChooseSequence)
+
+loopBtn.MouseButton1Click:Connect(function()
+    isLooping = not isLooping
+    loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(100,200,100) or Color3.fromRGB(60,60,60)
+end)
+
+confirmBtn.MouseButton1Click:Connect(function()
+    local input = tonumber(repeatInput.Text)
+    repeatCount = input and math.max(1, math.floor(input)) or 1
+    repeatFrame.Visible = false
+    blurOverlay.Visible = false
+    blurEffect.Enabled = false
+    playSequence()
+end)
+
+player.CharacterAdded:Connect(function()
+    stopPlayback()
+    repeatFrame.Visible = false
+    blurOverlay.Visible = false
+    blurEffect.Enabled = false
+end)
+
+task.defer(updateCanvas)
