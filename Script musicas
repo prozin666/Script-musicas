@@ -1,4 +1,4 @@
--- Compact Music GUI (mobile-friendly) - CORRIGIDO
+-- Compact Music GUI (mobile-friendly) - COMPLETO + CORRIGIDO
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -12,7 +12,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 
--- Botão toggle pequeno
+-- Botão toggle
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Name = "ToggleButton"
 toggleBtn.Size = UDim2.new(0, 36, 0, 36)
@@ -54,7 +54,7 @@ title.TextScaled = true
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = hud
 
--- Container
+-- Lista
 local container = Instance.new("ScrollingFrame")
 container.Name = "MusicList"
 container.Size = UDim2.new(1, -12, 0, 140)
@@ -67,7 +67,6 @@ container.Parent = hud
 local layout = Instance.new("UIGridLayout")
 layout.CellSize = UDim2.new(0, 140, 0, 34)
 layout.CellPadding = UDim2.new(0, 8, 0, 8)
-layout.FillDirection = Enum.FillDirection.Horizontal
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 layout.Parent = container
 
@@ -83,11 +82,11 @@ controls.Position = UDim2.new(0, 6, 1, -70)
 controls.BackgroundTransparency = 1
 controls.Parent = hud
 
-local list = Instance.new("UIListLayout", controls)
-list.HorizontalAlignment = Enum.HorizontalAlignment.Center
-list.Padding = UDim.new(0, 8)
+local uiList = Instance.new("UIListLayout", controls)
+uiList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+uiList.Padding = UDim.new(0, 8)
 
-local function controlButton(text)
+local function createBtn(text)
 	local b = Instance.new("TextButton")
 	b.Size = UDim2.new(0, 150, 0, 36)
 	b.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
@@ -100,10 +99,10 @@ local function controlButton(text)
 	return b
 end
 
-local playSeqBtn = controlButton("Tocar Sequência")
-local chooseSeqBtn = controlButton("Escolher Sequência")
+local playSeqBtn = createBtn("Tocar Sequência")
+local chooseSeqBtn = createBtn("Escolher Sequência")
 
--- Blur
+-- Blur / Overlay
 local blur = Instance.new("BlurEffect")
 blur.Size = 10
 blur.Enabled = false
@@ -116,12 +115,15 @@ overlay.BackgroundTransparency = 0.5
 overlay.Visible = false
 overlay.Parent = gui
 
--- Repeat frame
+-- Repeat Frame
 local repeatFrame = Instance.new("Frame")
 repeatFrame.Size = UDim2.new(0,260,0,160)
 repeatFrame.Position = UDim2.new(0.5,-130,0.5,-80)
 repeatFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+repeatFrame.BorderSizePixel = 1
+repeatFrame.BorderColor3 = Color3.fromRGB(200,200,200)
 repeatFrame.Visible = false
+repeatFrame.ZIndex = 6
 repeatFrame.Parent = gui
 Instance.new("UICorner", repeatFrame).CornerRadius = UDim.new(0,10)
 
@@ -135,9 +137,19 @@ repeatInput.TextColor3 = Color3.new(1,1,1)
 repeatInput.Parent = repeatFrame
 Instance.new("UICorner", repeatInput).CornerRadius = UDim.new(0,8)
 
+local loopBtn = Instance.new("TextButton")
+loopBtn.Size = UDim2.new(0,100,0,30)
+loopBtn.Position = UDim2.new(0.5,-50,0,95)
+loopBtn.Text = "Loop"
+loopBtn.TextScaled = true
+loopBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+loopBtn.TextColor3 = Color3.new(1,1,1)
+loopBtn.Parent = repeatFrame
+Instance.new("UICorner", loopBtn).CornerRadius = UDim.new(0,8)
+
 local confirmBtn = Instance.new("TextButton")
 confirmBtn.Size = UDim2.new(0,100,0,30)
-confirmBtn.Position = UDim2.new(0.5,-50,0,110)
+confirmBtn.Position = UDim2.new(0.5,-50,0,130)
 confirmBtn.Text = "Confirmar"
 confirmBtn.TextScaled = true
 confirmBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
@@ -145,7 +157,7 @@ confirmBtn.TextColor3 = Color3.new(1,1,1)
 confirmBtn.Parent = repeatFrame
 Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0,8)
 
--- LISTA DE MÚSICAS (CORRIGIDA)
+-- MÚSICAS (CORRIGIDAS)
 local musicas = {
 	{nome="Teto M4", id=112763988512317, duracao=185},
 	{nome="Os mlk lança com a bunda balança (alta)", id=128512104863934, duracao=135},
@@ -164,7 +176,23 @@ local musicas = {
 	{nome="Épico DMS (pode começar por esse)", id=140655042547224, duracao=125}
 }
 
--- Criar botões
+-- Clipboard
+local function copy(text)
+	if setclipboard then setclipboard(text)
+	elseif syn and syn.set_clipboard then syn.set_clipboard(text)
+	end
+end
+
+-- Estado
+local isPlaying = false
+local isChoosingSequence = false
+local customSequence = {}
+local currentSequence = musicas
+local repeatCount = 1
+local isLooping = false
+local playbackThread
+
+-- Criar botões músicas
 for _,m in ipairs(musicas) do
 	local b = Instance.new("TextButton")
 	b.Size = UDim2.new(0,140,0,34)
@@ -176,13 +204,81 @@ for _,m in ipairs(musicas) do
 	b.Parent = container
 	Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
 	b.MouseButton1Click:Connect(function()
-		if setclipboard then setclipboard(tostring(m.id)) end
+		if isChoosingSequence then
+			table.insert(customSequence, m)
+			b.BackgroundColor3 = Color3.fromRGB(100,100,100)
+		else
+			copy(tostring(m.id))
+		end
 	end)
 end
 
+-- Playback
+local function stopPlayback()
+	isPlaying = false
+	if playbackThread then task.cancel(playbackThread) end
+	playSeqBtn.Text = "Tocar Sequência"
+end
+
+local function playSequence()
+	if isPlaying then stopPlayback() return end
+	isPlaying = true
+	playSeqBtn.Text = "Parar Sequência"
+	playbackThread = task.spawn(function()
+		local count = 0
+		while (isLooping or count < repeatCount) and isPlaying do
+			for _,m in ipairs(currentSequence) do
+				if not isPlaying then break end
+				print("Play:", m.id)
+				task.wait(m.duracao)
+			end
+			if not isLooping then count += 1 end
+		end
+		stopPlayback()
+		currentSequence = musicas
+	end)
+end
+
+-- UI logic
 toggleBtn.MouseButton1Click:Connect(function()
 	hud.Visible = not hud.Visible
 	updateCanvas()
+end)
+
+chooseSeqBtn.MouseButton1Click:Connect(function()
+	if isChoosingSequence then
+		isChoosingSequence = false
+		chooseSeqBtn.Text = "Escolher Sequência"
+		if #customSequence > 0 then currentSequence = customSequence end
+		customSequence = {}
+		open = true
+		repeatFrame.Visible = true
+		overlay.Visible = true
+		blur.Enabled = true
+	else
+		isChoosingSequence = true
+		chooseSeqBtn.Text = "Confirmar Sequência"
+		customSequence = {}
+	end
+end)
+
+loopBtn.MouseButton1Click:Connect(function()
+	isLooping = not isLooping
+	loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(100,200,100) or Color3.fromRGB(60,60,60)
+end)
+
+confirmBtn.MouseButton1Click:Connect(function()
+	repeatCount = tonumber(repeatInput.Text) or 1
+	repeatFrame.Visible = false
+	overlay.Visible = false
+	blur.Enabled = false
+	playSequence()
+end)
+
+playSeqBtn.MouseButton1Click:Connect(function()
+	repeatFrame.Visible = true
+	overlay.Visible = true
+	blur.Enabled = true
 end)
 
 updateCanvas()
