@@ -208,7 +208,8 @@ local musicas = {
     {nome="Paparazzi tá de olho em nós, os mlk é liso", id=122795207955751, duracao=123},
     {nome="Épico DMS (pode começar por esse)", id=140655042547224, duracao=125},
     {nome="5 mentes bem pensantes", id=76083159627700, duracao=107},
-    {nome="Evoluiu", id=96394281857877, duracao=177}
+    {nome="Evoluiu", id=96394281857877, duracao=177},
+    {nome="Barões – Já que me... 2", id=134415658996371, duracao=124}
 }
 
 -- Clipboard helper
